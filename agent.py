@@ -4,13 +4,16 @@ load_dotenv()
 
 import os
 import pandas as pd
+import re
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 class AutoMLAgent:
-    def __init__(self, model="models/gemini-2.0-flash"):
+    def __init__(self, model="gemini-2.0-flash"):
+        # Initializing with a temperature of 0 for consistent code generation
         self.llm = ChatGoogleGenerativeAI(
             model=model,
-            google_api_key=os.getenv("GOOGLE_API_KEY")
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0 
         )
 
     def ask(self, question: str) -> str:
@@ -19,55 +22,44 @@ class AutoMLAgent:
 
     def get_task_type(self, df: pd.DataFrame) -> str:
         prompt = f"""
-        You are a data scientist. Given the dataset with columns:
-        {list(df.columns)},
-        determine the type of ML problem (classification or regression).
-        Return one word only: "classification" or "regression".
+        Analyze these columns: {list(df.columns)}.
+        Based on standard data science practices, is this a 'classification' or 'regression' problem?
+        Return ONLY the word 'classification' or 'regression'.
         """
         return self.ask(prompt).lower()
 
     def get_cleaning_suggestion(self, df: pd.DataFrame) -> str:
+        # Using markdown for better LLM readability
         prompt = f"""
-        You are a data science assistant. Given this sample of the dataset:
-        {df.head(10).to_string(index=False)},
-        suggest:
-        - Handling missing values
-        - Feature engineering or dropping unnecessary columns
-        - Data type conversions
-
-        Respond in bullet points.
-        """
-        response = self.llm.invoke(prompt)
-        return response.content.strip()
-    
-    
-
-
-    def get_cleaning_code(self, df: pd.DataFrame) -> str:
-        import re
-
-        def clean_response_code(code: str) -> str:
-            # Remove triple backticks and python language markers
-            code = re.sub(r"```(?:python)?", "", code)
-            code = re.sub(r"```", "", code)
-            return code.strip()
-        
-        prompt = f"""
-        You're a data preprocessing assistant. The following is a sample dataset:
+        Review this data sample:
         {df.head(10).to_markdown(index=False)}
 
-        Based on this data, generate Python Pandas code that:
-        1. Handles missing values (drop or fill),
-        2. Fixes obvious type issues,
-        3. Removes duplicates or outliers if needed.
-
-        Only return executable Python code inside a function named clean_data(df), 
-        which accepts a DataFrame and returns the cleaned DataFrame.
-        Only return pure Python code. No markdown. No explanation. No formatting characters.
+        Provide brief bullet points for:
+        - Missing value strategy
+        - Recommended feature drops
+        - Type conversions
+        Use a professional, minimalist tone.
         """
-        response = self.llm.invoke(prompt)
-        raw_code = response.content.strip()
-        return clean_response_code(raw_code)
-    
+        return self.ask(prompt)
 
+    def get_cleaning_code(self, df: pd.DataFrame) -> str:
+        prompt = f"""
+        Generate a Python function `clean_data(df)` for this dataset:
+        {df.head(5).to_markdown(index=False)}
 
+        Requirements:
+        1. Handle nulls.
+        2. Encode strings if necessary.
+        3. Return the cleaned dataframe.
+        
+        CRITICAL: Include 'import pandas as pd' and 'import numpy as np' inside the function.
+        Return ONLY the raw python code. No backticks, no markdown, no explanations.
+        """
+        raw_response = self.ask(prompt)
+        return self._extract_pure_code(raw_response)
+
+    def _extract_pure_code(self, text: str) -> str:
+        # Robustly remove markdown code blocks if the LLM ignores instructions
+        text = re.sub(r"```python\n?", "", text)
+        text = re.sub(r"```\n?", "", text)
+        return text.strip()
