@@ -3,49 +3,65 @@ import pandas as pd
 import os
 import pickle
 import subprocess
-import seaborn as sns
-import matplotlib.pyplot as plt
-import plotly.express as px
 import numpy as np
+import plotly.express as px
 from agent import AutoMLAgent
-from pipeline import run_automl, generate_shap, plot_target_distribution
+from pipeline import run_automl, generate_shap
 
-# --- Strict Monochromatic Dark Theme ---
-def apply_minimal_dark_style():
+# --- Strict Minimalist Dark Theme (Black, Gray, White) ---
+def apply_clean_dark_theme():
     st.markdown("""
         <style>
-        /* Base Colors: Black (#000000), Gray (#1E1E1E), White (#FFFFFF) */
+        /* Base Palette */
         .stApp {
             background-color: #000000;
             color: #FFFFFF;
         }
 
-        /* Top Navigation Bar */
-        .nav-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            background-color: #1E1E1E;
-            padding: 10px 50px;
-            display: flex;
+        /* Top Navigation Styling */
+        div[data-testid="stHorizontalBlock"] {
+            background-color: #000000;
+            padding: 10px;
+        }
+
+        /* Style the Radio buttons to look like a Nav Bar */
+        div[data-testid="stWidgetLabel"] { display: none; }
+        
+        .stRadio > div {
+            flex-direction: row;
             justify-content: center;
-            border-bottom: 1px solid #333333;
-            z-index: 1000;
+            background-color: #000000;
+            gap: 20px;
         }
 
-        /* Fix Content Padding for Top Nav */
-        .main .block-container {
-            padding-top: 100px;
+        .stRadio label {
+            background-color: #1E1E1E !important;
+            color: #FFFFFF !important;
+            border: 1px solid #333333 !important;
+            padding: 8px 20px !important;
+            border-radius: 0px !important;
+            font-size: 14px;
+            font-weight: 500;
+            transition: 0.3s;
         }
 
-        /* Button Styling (Gray & White) */
+        .stRadio label:hover {
+            border-color: #FFFFFF !important;
+        }
+
+        /* Selected State */
+        div[data-testid="stMarkdownContainer"] p { color: #FFFFFF; }
+        
+        /* Buttons */
         div.stButton > button {
             background-color: #1E1E1E;
             color: #FFFFFF;
             border: 1px solid #333333;
-            border-radius: 4px;
-            transition: all 0.2s ease;
+            border-radius: 0px;
+            width: 100%;
+            height: 45px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
         }
 
         div.stButton > button:hover {
@@ -54,105 +70,96 @@ def apply_minimal_dark_style():
             border: 1px solid #FFFFFF;
         }
 
-        /* Sidebar Removal (Optional - Hiding default sidebar elements) */
-        [data-testid="stSidebar"] {
-            display: none;
-        }
-
-        /* Input Customization */
-        input, select, .stSelectbox div[data-baseweb="select"] {
-            background-color: #1E1E1E !important;
-            color: white !important;
+        /* Inputs */
+        .stTextInput input, .stSelectbox div[data-baseweb="select"] {
+            background-color: #000000 !important;
+            color: #FFFFFF !important;
             border: 1px solid #333333 !important;
+            border-radius: 0px !important;
         }
 
-        /* Metric Cards */
-        div[data-testid="metric-container"] {
-            background-color: #1E1E1E;
-            border: 1px solid #333333;
-            padding: 20px;
-            border-radius: 5px;
-        }
+        /* Hide Streamlit elements */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
 
-        /* Minimal Footer */
-        .footer {
-            text-align: center;
-            padding: 20px;
-            font-size: 12px;
-            color: #555555;
-            border-top: 1px solid #1E1E1E;
+        /* Horizontal Divider */
+        hr {
+            border: 0;
+            border-top: 1px solid #333333;
+            margin: 20px 0;
         }
         </style>
     """, unsafe_allow_html=True)
 
-# --- App Config ---
-st.set_page_config(layout="wide", page_title="AutoML Agent", page_icon="🤖")
-apply_minimal_dark_style()
+st.set_page_config(layout="wide", page_title="AutoML Agent")
+apply_clean_dark_theme()
 
-# --- Top Navigation Logic ---
-# Since Streamlit doesn't have a native 'Top Nav', we use columns to simulate it.
-pages = ["Upload", "Explore", "Train", "Status"]
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "Upload"
+# --- Top Navigation ---
+# Using a radio button forced into a horizontal row to act as a Nav Bar
+nav_choice = st.radio(
+    "Navigation",
+    ["DATASET", "EXPLORATION", "TRAINING", "DEPLOYMENT"],
+    horizontal=True
+)
 
-# Render Navigation Bar
-nav_cols = st.columns(len(pages))
-for i, p in enumerate(pages):
-    if nav_cols[i].button(p, use_container_width=True):
-        st.session_state.current_page = p
+st.markdown("---")
 
-st.divider() # Line separator under navigation
-page = st.session_state.current_page
+# --- Logic Segments ---
 
-# --- Logic Sections ---
-
-if page == "Upload":
-    st.header("📂 Data Upload")
+if nav_choice == "DATASET":
+    st.title("01 // DATASET UPLOAD")
     uploaded_file = st.file_uploader("", type="csv")
+    
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
         st.session_state.df = df
-        st.success("Dataset Loaded.")
-        st.dataframe(df.head(10), use_container_width=True)
+        st.success("CSV DATA LINKED")
+        st.dataframe(df.head(20), use_container_width=True)
 
-elif page == "Explore":
+elif nav_choice == "EXPLORATION":
     if "df" in st.session_state:
-        st.header("🔎 Analysis")
+        st.title("02 // SYSTEM ANALYSIS")
         df = st.session_state.df
         
+        # Grid layout for metrics
         c1, c2, c3 = st.columns(3)
-        c1.metric("Rows", df.shape[0])
-        c2.metric("Features", df.shape[1])
-        c3.metric("Missing", df.isna().sum().sum())
-
-        # Dark Plotly Charts
-        fig = px.histogram(df, x=df.columns[0], template="plotly_dark", color_discrete_sequence=['#FFFFFF'])
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No data found. Go to Upload.")
-
-elif page == "Train":
-    if "df" in st.session_state:
-        st.header("🧠 Model Training")
-        target = st.selectbox("Select Target Column", st.session_state.df.columns)
+        with c1: st.metric("RECORDS", df.shape[0])
+        with c2: st.metric("FEATURES", df.shape[1])
+        with c3: st.metric("NULLS", df.isna().sum().sum())
         
-        if st.button("Start Training"):
-            with st.status("Processing...", expanded=True):
-                # Placeholder for your actual AutoML logic
-                st.write("Initializing Agent...")
+        # Plotly chart in monochrome
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        if numeric_cols:
+            fig = px.histogram(
+                df, x=numeric_cols[0], 
+                template="plotly_dark", 
+                color_discrete_sequence=['#FFFFFF']
+            )
+            fig.update_layout(paper_bgcolor="#000000", plot_bgcolor="#000000")
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("AWAITING DATASET...")
+
+elif nav_choice == "TRAINING":
+    if "df" in st.session_state:
+        st.title("03 // ENGINE TRAINING")
+        target = st.selectbox("TARGET VARIABLE", st.session_state.df.columns)
+        
+        if st.button("EXECUTE AUTOML"):
+            with st.spinner("TRAINING..."):
                 model, X = run_automl(st.session_state.df, target)
                 st.session_state.model_trained = True
-                st.success("Model Complete")
+                st.success("PROCESS COMPLETE")
     else:
-        st.warning("Upload a dataset first.")
+        st.info("AWAITING DATASET...")
 
-elif page == "Status":
-    st.header("📈 System Status")
+elif nav_choice == "DEPLOYMENT":
+    st.title("04 // DEPLOYMENT STATUS")
     if os.path.exists("trained_model.pkl"):
-        st.write("✅ Primary Model: `Ready` (trained_model.pkl)")
-        if st.button("Launch Predictor UI"):
+        st.code("STATUS: LOCAL_MODEL_ACTIVE", language="bash")
+        if st.button("LAUNCH PREDICTOR INTERFACE"):
             subprocess.Popen(["streamlit", "run", "predictor_ui.py"])
+            st.toast("Predictor UI Launched")
     else:
-        st.write("⚪ Status: `No Model Found`")
-
-st.markdown('<div class="footer">MSR AUTOML AGENT | 2026</div>', unsafe_allow_html=True)
+        st.warning("NO ACTIVE MODEL DETECTED")
