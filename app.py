@@ -13,241 +13,224 @@ import time
 
 from agent import AutoMLAgent
 from pipeline import run_automl, predict, generate_shap, plot_target_distribution, detect_uninformative_columns
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
-# --- Page Config ---
-st.set_page_config(
-    layout="wide", 
-    page_title="AutoML Agent Pro", 
-    page_icon="⚡",
-    initial_sidebar_state="expanded"
-)
-
-# --- Modern Styling (Glassmorphism & Clean Refinement) ---
-def local_css():
+# --- Modern Dark Theme CSS ---
+def apply_modern_style():
     st.markdown("""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
-
-        html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif;
-            color: #2D3436;
+        /* Main Background and Text */
+        .stApp {
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #ffffff;
         }
 
-        /* Background Gradient */
-        .stApp {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        /* Glassmorphism Effect for Cards */
+        div.stButton > button {
+            width: 100%;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            padding: 10px;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        div.stButton > button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid #00d2ff;
+            box-shadow: 0px 0px 15px rgba(0, 210, 255, 0.5);
+            color: #00d2ff;
         }
 
         /* Sidebar Styling */
         [data-testid="stSidebar"] {
-            background-color: rgba(255, 255, 255, 0.8);
+            background-color: rgba(0, 0, 0, 0.4) !important;
             backdrop-filter: blur(10px);
-            border-right: 1px solid rgba(255, 255, 255, 0.3);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        /* Modern Button Styling */
-        .stButton>button {
-            width: 100%;
-            border-radius: 12px;
-            border: none;
-            height: 3em;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        /* Input Fields */
+        .stSelectbox div[data-baseweb="select"], .stTextInput input {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            color: white !important;
+            border-radius: 10px !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
         }
 
-        .stButton>button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-            color: #fff;
-        }
-
-        /* Card-like containers for data */
-        div[data-testid="stExpander"], .stDataFrame, .element-container {
-            background-color: white;
+        /* Metric/Card Styling */
+        div[data-testid="metric-container"] {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
             border-radius: 15px;
-            padding: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        /* Status & Metric Improvements */
-        [data-testid="stMetricValue"] {
-            font-size: 1.8rem;
+        /* Custom Titles */
+        h1, h2, h3 {
+            font-family: 'Inter', sans-serif;
             font-weight: 700;
-            color: #4834d4;
+            background: -webkit-linear-gradient(#00d2ff, #3a7bd5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        
-        /* Custom Footer */
+
+        /* Dataframe background fix */
+        .stDataFrame {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+        }
+
+        /* Footer Custom */
         .footer {
             position: fixed;
             bottom: 10px;
             right: 20px;
             font-size: 12px;
-            color: #636e72;
-            background: rgba(255,255,255,0.5);
-            padding: 5px 15px;
-            border-radius: 20px;
+            color: rgba(255,255,255,0.4);
         }
         </style>
-        
-        <div class="footer">🚀 Powered by Gemini & FLAML | Dev: MSR</div>
+        <div class="footer">🚀 AutoML Agent v2.0 | sairamanmathivelan@gmail.com</div>
     """, unsafe_allow_html=True)
 
-local_css()
+# --- Configuration ---
+st.set_page_config(layout="wide", page_title="AutoML Deployment Agent", page_icon="🤖")
+apply_modern_style()
 
-# --- Session State Initialization ---
+# --- Session State ---
 for key in ["df", "model_trained", "deploy_clicked", "target_col", "selected_page"]:
     if key not in st.session_state:
-        st.session_state[key] = None if key == "df" else (pages[0] if key == "selected_page" else False)
+        st.session_state[key] = pages[0] if key == "selected_page" else (None if key == "df" else False)
 
-# --- Sidebar Navigation (Modernized) ---
+# --- Sidebar Navigation ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2103/2103633.png", width=80)
-    st.title("AutoML Pro")
-    st.markdown("---")
+    st.image("https://cdn-icons-png.flaticon.com/512/2103/2103633.png", width=80) # Use a generic AI icon
+    st.title("Navigation")
+    pages = ["Upload Dataset", "Explore Dataset", "Run ML Agent", "Training Status", "Retrain Model"]
     
-    pages = ["📂 Upload Dataset", "🔍 Explore Data", "🧠 Train Model", "📊 Insights", "⚙️ Management"]
-    
-    # Selection using a cleaner radio or individual buttons
-    selection = st.radio("Navigation", pages, label_visibility="collapsed")
-    st.session_state.selected_page = selection
-    
-    st.markdown("---")
-    if st.session_state.df is not None:
-        st.success("Dataset Loaded")
-    if st.session_state.model_trained:
-        st.info("Model: Ready ✅")
+    for p in pages:
+        if st.button(p, key=f"nav_{p}"):
+            st.session_state.selected_page = p
 
 page = st.session_state.selected_page
 
-# --- Page: Upload Dataset ---
-if "Upload" in page:
-    st.header("📂 Data Onboarding")
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        uploaded_file = st.file_uploader("Drop your CSV file here", type="csv")
-        if uploaded_file:
-            df = pd.read_csv(uploaded_file)
-            st.session_state.df = df
-            st.dataframe(df.head(10), use_container_width=True)
+# --- Main Logic Sections ---
 
-    with col2:
-        if st.session_state.df is not None:
-            st.markdown("### ✨ AI Pre-processing")
-            if st.button("Generate Cleaning Plan"):
+if page == "Upload Dataset":
+    st.title("📂 Data Acquisition")
+    uploaded_file = st.file_uploader("Drop your CSV here", type="csv")
+    
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+        st.session_state.df = df
+        st.success("✅ Dataset Linked Successfully")
+        
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            st.dataframe(df.head(10), use_container_width=True)
+        
+        with col2:
+            st.markdown("### ✨ Smart Cleaning")
+            if st.button("Generate AI Suggestions"):
                 agent = AutoMLAgent()
-                with st.spinner("Gemini is analyzing structure..."):
-                    suggestion = agent.get_cleaning_suggestion(st.session_state.df)
-                    code = agent.get_cleaning_code(st.session_state.df)
+                with st.spinner("Analyzing data structure..."):
+                    suggestion = agent.get_cleaning_suggestion(df)
+                    code = agent.get_cleaning_code(df)
                     st.session_state.cleaning_code = code
-                    st.markdown(suggestion)
+                    st.info(suggestion)
             
             if "cleaning_code" in st.session_state:
-                if st.button("Apply Auto-Clean"):
-                    # Execution logic remains same
-                    local_vars = {}
-                    exec(st.session_state.cleaning_code, globals(), local_vars)
-                    st.session_state.df = local_vars["clean_data"](st.session_state.df)
-                    st.toast("Data Refined!", icon="🪄")
+                if st.button("Apply Code & Clean"):
+                    try:
+                        local_vars = {}
+                        exec(st.session_state.cleaning_code, globals(), local_vars)
+                        st.session_state.df = local_vars["clean_data"](df)
+                        st.success("Data Refined!")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
-# --- Page: Explore Dataset ---
-elif "Explore" in page:
+elif page == "Explore Dataset":
     if st.session_state.df is not None:
-        st.header("🔍 Visual Intelligence")
+        st.title("🔎 Deep Insight EDA")
         df = st.session_state.df
         
-        tab1, tab2, tab3 = st.tabs(["Overview", "Distributions", "Correlations"])
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Rows", df.shape[0])
+        m2.metric("Total Columns", df.shape[1])
+        m3.metric("Missing Values", df.isna().sum().sum())
+
+        tab1, tab2, tab3 = st.tabs(["📊 Distributions", "🔗 Correlations", "📋 Summary"])
         
         with tab1:
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Rows", df.shape[0])
-            m2.metric("Columns", df.shape[1])
-            m3.metric("Missing Values", df.isna().sum().sum())
-            st.dataframe(df.describe(), use_container_width=True)
-            
-        with tab2:
             numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-            selected_col = st.selectbox("Select Feature to Analyze", numeric_cols)
-            fig = px.histogram(df, x=selected_col, marginal="violin", template="plotly_white", color_discrete_sequence=['#764ba2'])
-            st.plotly_chart(fig, use_container_width=True)
-            
-        with tab3:
-            if len(numeric_cols) > 1:
+            if numeric_cols:
+                selected_col = st.selectbox("Select Feature to Visualize", numeric_cols)
+                fig = px.histogram(df, x=selected_col, marginal="box", template="plotly_dark", color_discrete_sequence=['#00d2ff'])
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with tab2:
+            if len(numeric_cols) >= 2:
                 corr = df[numeric_cols].corr()
-                fig_corr = px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale='RdBu_r')
+                fig_corr = px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale='RdBu_r', template="plotly_dark")
                 st.plotly_chart(fig_corr, use_container_width=True)
+        
+        with tab3:
+            st.dataframe(df.describe().T, use_container_width=True)
     else:
         st.warning("Please upload a dataset first.")
 
-# --- Page: Train Model ---
-elif "Train" in page:
+elif page == "Run ML Agent":
     if st.session_state.df is not None:
-        st.header("🧠 Training Engine")
+        st.title("🧠 Model Factory")
         df = st.session_state.df
         
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            target = st.selectbox("Select Target Variable", df.columns)
-            st.session_state.target_col = target
+        target = st.selectbox("Choose Target Variable", df.columns)
+        st.session_state.target_col = target
+
+        if st.button("🚀 Execute AutoML Training"):
+            agent = AutoMLAgent()
+            with st.status("Training in progress...", expanded=True) as status:
+                st.write("Detecting task type...")
+                task_type = agent.get_task_type(df)
+                st.write(f"Task: {task_type}")
+                
+                st.write("Optimizing Hyperparameters...")
+                model, X = run_automl(df, target)
+                
+                with open("trained_model.pkl", "wb") as f:
+                    pickle.dump(model, f)
+                
+                feature_types = X.dtypes.apply(lambda dt: dt.name).to_dict()
+                with open("feature_types.pkl", "wb") as f:
+                    pickle.dump(feature_types, f)
+                
+                st.session_state.model_trained = True
+                status.update(label="Training Complete!", state="complete", expanded=False)
+
+            st.balloons()
             
-            if st.button("🚀 Start AutoML Pipeline"):
-                agent = AutoMLAgent()
-                with st.status("Training in progress...", expanded=True) as status:
-                    st.write("Detecting task type...")
-                    task_type = agent.get_task_type(df)
-                    
-                    st.write("Optimizing Hyperparameters (FLAML)...")
-                    model, X = run_automl(df, target)
-                    
-                    # Saving logic
-                    with open("trained_model.pkl", "wb") as f:
-                        pickle.dump(model, f)
-                    
-                    st.session_state.model_trained = True
-                    status.update(label="Training Complete!", state="complete", expanded=False)
-                
-                st.balloons()
-        
-        with col2:
-            if st.session_state.model_trained:
-                st.success(f"Model trained successfully! (Target: {target})")
-                st.markdown("### Target Distribution")
-                plot_target_distribution(df, target)
-                st.image("outputs/target_dist.png")
+            # Results UI
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("Model Performance")
+                st.code(f"Algorithm: {model.estimator}")
+            with c2:
+                st.subheader("Explainability")
+                generate_shap(model, X)
+                st.image("outputs/shap_plot.png")
     else:
-        st.warning("Upload data to enable training.")
+        st.warning("Upload data to start training.")
 
-# --- Page: Insights ---
-elif "Insights" in page:
-    if st.session_state.model_trained:
-        st.header("📊 Model Explainability")
-        if os.path.exists("outputs/shap_plot.png"):
-            st.image("outputs/shap_plot.png", caption="Feature Importance (SHAP values)")
-        else:
-            st.info("Run training to see importance plots.")
-    else:
-        st.error("No trained model found.")
-
-# --- Page: Management ---
-elif "Management" in page:
-    st.header("⚙️ Deployment & Export")
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("Cloud Deployment")
+# --- Shared Deployment Footer ---
+if st.session_state.model_trained:
+    st.divider()
+    col_a, col_b = st.columns([3, 1])
+    with col_a:
+        st.info("💡 Model is ready for production deployment.")
+    with col_b:
         if st.button("🔌 Launch Predictor UI"):
-            if not st.session_state.deploy_clicked:
-                subprocess.Popen(["streamlit", "run", "predictor_ui.py"])
-                st.session_state.deploy_clicked = True
-                st.toast("Deployment active!")
-            else:
-                st.info("Predictor is already live.")
-                
-    with c2:
-        st.subheader("Local Export")
-        if os.path.exists("trained_model.pkl"):
-            with open("trained_model.pkl", "rb") as f:
-                st.download_button("⬇️ Download .PKL Model", f, "model.pkl")
+            subprocess.Popen(["streamlit", "run", "predictor_ui.py"])
+            st.toast("Predictor UI is live!", icon="🔥")
