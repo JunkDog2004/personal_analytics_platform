@@ -5,6 +5,8 @@ import pickle
 import subprocess
 import numpy as np
 import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 from agent import AutoMLAgent
 from pipeline import run_automl, generate_shap
 
@@ -24,33 +26,39 @@ def apply_clean_dark_theme():
             padding: 10px;
         }
 
-        /* Style the Radio buttons to look like a Nav Bar */
+        /* Nav Bar Radio Buttons */
         div[data-testid="stWidgetLabel"] { display: none; }
         
         .stRadio > div {
             flex-direction: row;
             justify-content: center;
             background-color: #000000;
-            gap: 20px;
+            gap: 10px;
         }
 
         .stRadio label {
-            background-color: #1E1E1E !important;
-            color: #FFFFFF !important;
-            border: 1px solid #333333 !important;
-            padding: 8px 20px !important;
+            background-color: #000000 !important;
+            color: #888888 !important;
+            border: 1px solid #1E1E1E !important;
+            padding: 10px 30px !important;
             border-radius: 0px !important;
-            font-size: 14px;
-            font-weight: 500;
-            transition: 0.3s;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            transition: 0.2s;
         }
 
         .stRadio label:hover {
-            border-color: #FFFFFF !important;
+            color: #FFFFFF !important;
+            border-color: #444444 !important;
         }
 
-        /* Selected State */
-        div[data-testid="stMarkdownContainer"] p { color: #FFFFFF; }
+        /* Selected Tab State */
+        .stRadio div[role="radiogroup"] input:checked + label {
+            background-color: #1E1E1E !important;
+            color: #FFFFFF !important;
+            border-color: #FFFFFF !important;
+        }
         
         /* Buttons */
         div.stButton > button {
@@ -62,6 +70,7 @@ def apply_clean_dark_theme():
             height: 45px;
             text-transform: uppercase;
             letter-spacing: 2px;
+            font-size: 12px;
         }
 
         div.stButton > button:hover {
@@ -70,8 +79,8 @@ def apply_clean_dark_theme():
             border: 1px solid #FFFFFF;
         }
 
-        /* Inputs */
-        .stTextInput input, .stSelectbox div[data-baseweb="select"] {
+        /* Inputs & Selectboxes */
+        .stSelectbox div[data-baseweb="select"], .stTextInput input {
             background-color: #000000 !important;
             color: #FFFFFF !important;
             border: 1px solid #333333 !important;
@@ -79,27 +88,22 @@ def apply_clean_dark_theme():
         }
 
         /* Hide Streamlit elements */
-        #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header {visibility: hidden;}
+        #MainMenu {visibility: hidden;}
 
-        /* Horizontal Divider */
-        hr {
-            border: 0;
-            border-top: 1px solid #333333;
-            margin: 20px 0;
-        }
+        /* Divider */
+        hr { border-top: 1px solid #1E1E1E; margin: 20px 0; }
         </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(layout="wide", page_title="AutoML Agent")
+st.set_page_config(layout="wide", page_title="AutoML")
 apply_clean_dark_theme()
 
 # --- Top Navigation ---
-# Using a radio button forced into a horizontal row to act as a Nav Bar
 nav_choice = st.radio(
     "Navigation",
-    ["DATASET", "EXPLORATION", "TRAINING", "DEPLOYMENT"],
+    ["DATASET", "ANALYSIS", "ENGINE", "DEPLOY"],
     horizontal=True
 )
 
@@ -114,52 +118,76 @@ if nav_choice == "DATASET":
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
         st.session_state.df = df
-        st.success("CSV DATA LINKED")
-        st.dataframe(df.head(20), use_container_width=True)
+        st.success("DATA SOURCE LINKED")
+        st.dataframe(df.head(15), use_container_width=True)
 
-elif nav_choice == "EXPLORATION":
+elif nav_choice == "ANALYSIS":
     if "df" in st.session_state:
         st.title("02 // SYSTEM ANALYSIS")
         df = st.session_state.df
         
-        # Grid layout for metrics
-        c1, c2, c3 = st.columns(3)
-        with c1: st.metric("RECORDS", df.shape[0])
-        with c2: st.metric("FEATURES", df.shape[1])
-        with c3: st.metric("NULLS", df.isna().sum().sum())
-        
-        # Plotly chart in monochrome
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        if numeric_cols:
-            fig = px.histogram(
-                df, x=numeric_cols[0], 
-                template="plotly_dark", 
-                color_discrete_sequence=['#FFFFFF']
-            )
-            fig.update_layout(paper_bgcolor="#000000", plot_bgcolor="#000000")
-            st.plotly_chart(fig, use_container_width=True)
+        # Metrics Row
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("RECORDS", df.shape[0])
+        m2.metric("FEATURES", df.shape[1])
+        m3.metric("NULL_VALS", df.isna().sum().sum())
+        m4.metric("DUPLICATES", df.duplicated().sum())
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("### NULL MATRIX")
+            # Graph 1: Missing Values Heatmap (Matplotlib/Seaborn)
+            fig_null, ax_null = plt.subplots(figsize=(10, 5))
+            fig_null.patch.set_facecolor('#000000')
+            ax_null.set_facecolor('#000000')
+            sns.heatmap(df.isnull(), cbar=False, cmap=['#1E1E1E', '#FFFFFF'], ax=ax_null)
+            ax_null.tick_params(colors='#FFFFFF', labelsize=8)
+            st.pyplot(fig_null)
+
+        with col2:
+            st.write("### CORRELATION MATRIX")
+            # Graph 2: Feature Correlation (Plotly)
+            numeric_df = df.select_dtypes(include=[np.number])
+            if not numeric_df.empty:
+                corr = numeric_df.corr()
+                fig_corr = px.imshow(
+                    corr, 
+                    text_auto=True, 
+                    aspect="auto", 
+                    color_continuous_scale=['#000000', '#333333', '#FFFFFF'],
+                    template="plotly_dark"
+                )
+                fig_corr.update_layout(
+                    paper_bgcolor="#000000", 
+                    plot_bgcolor="#000000",
+                    margin=dict(l=20, r=20, t=20, b=20)
+                )
+                st.plotly_chart(fig_corr, use_container_width=True)
+            else:
+                st.warning("NO NUMERIC DATA FOR CORRELATION")
     else:
         st.info("AWAITING DATASET...")
 
-elif nav_choice == "TRAINING":
+elif nav_choice == "ENGINE":
     if "df" in st.session_state:
-        st.title("03 // ENGINE TRAINING")
-        target = st.selectbox("TARGET VARIABLE", st.session_state.df.columns)
+        st.title("03 // ML ENGINE")
+        target = st.selectbox("TARGET COLUMN", st.session_state.df.columns)
         
-        if st.button("EXECUTE AUTOML"):
-            with st.spinner("TRAINING..."):
+        if st.button("START TRAIN"):
+            with st.status("EXECUTING...", expanded=True):
                 model, X = run_automl(st.session_state.df, target)
                 st.session_state.model_trained = True
-                st.success("PROCESS COMPLETE")
+                st.success("ENGINE READY")
     else:
         st.info("AWAITING DATASET...")
 
-elif nav_choice == "DEPLOYMENT":
-    st.title("04 // DEPLOYMENT STATUS")
+elif nav_choice == "DEPLOY":
+    st.title("04 // DEPLOYMENT")
     if os.path.exists("trained_model.pkl"):
-        st.code("STATUS: LOCAL_MODEL_ACTIVE", language="bash")
-        if st.button("LAUNCH PREDICTOR INTERFACE"):
+        st.code("STATUS: MODEL_LOADED", language="bash")
+        if st.button("RUN PREDICTOR UI"):
             subprocess.Popen(["streamlit", "run", "predictor_ui.py"])
-            st.toast("Predictor UI Launched")
+            st.toast("Predictor UI Online")
     else:
-        st.warning("NO ACTIVE MODEL DETECTED")
+        st.warning("SYSTEM OFFLINE: NO MODEL")
