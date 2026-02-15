@@ -9,3 +9,4 @@ langchain
 google-generativeai
 python-dotenv
 langchain-google-genai
+plotly
