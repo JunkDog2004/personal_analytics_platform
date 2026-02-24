@@ -6,8 +6,8 @@ import subprocess
 import seaborn as sns
 import matplotlib.pyplot as plt
 import plotly.express as px
+import plotly.io as pio
 import numpy as np
-import base64
 
 from agent import AutoMLAgent
 from pipeline import run_automl, predict, generate_shap, plot_target_distribution, detect_uninformative_columns
@@ -22,19 +22,28 @@ FOOTER_TEXT = f"Analytics Dashboard | {DEVELOPER_NAME} {CONTACT_EMAIL}"
 # --- APP CONFIGURATION ---
 st.set_page_config(layout="wide", page_title=APP_TITLE, page_icon="📊")
 
+# Set Plotly default to dark template
+pio.templates.default = "plotly_dark"
+
 def apply_custom_style():
     st.markdown(
         f"""
         <style>
-        /* Main background - Clean Analytics Look */
+        /* Main background - Soft Dark Slate */
         .stApp {{
-            background-color: #f8f9fa;
+            background-color: #1e1e2e;
+            color: #cdd6f4;
         }}
 
-        /* Professional Sidebar */
+        /* Sidebar - Deeper Charcoal */
         [data-testid="stSidebar"] {{
-            background-color: #ffffff;
-            border-right: 1px solid #e0e0e0;
+            background-color: #181825;
+            border-right: 1px solid #313244;
+        }}
+
+        /* Sidebar text color */
+        [data-testid="stSidebar"] .stMarkdown {{
+            color: #cdd6f4;
         }}
 
         /* Modern Custom Footer */
@@ -46,37 +55,48 @@ def apply_custom_style():
             left: 0;
             bottom: 0;
             width: 100%;
-            background-color: #ffffff;
-            color: #636e72;
+            background-color: #11111b;
+            color: #a6adc8;
             text-align: center;
             padding: 8px;
             font-size: 12px;
-            border-top: 1px solid #e0e0e0;
+            border-top: 1px solid #313244;
             z-index: 100;
         }}
 
-        /* Buttons and Inputs */
+        /* Soft Blue Buttons */
         .stButton>button {{
-            background-color: #0984e3;
-            color: white;
+            background-color: #89b4fa;
+            color: #11111b;
             border: none;
-            border-radius: 4px;
-            font-weight: 500;
-            transition: all 0.3s;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.3s ease;
         }}
         .stButton>button:hover {{
-            background-color: #74b9ff;
-            color: white;
+            background-color: #b4befe;
+            color: #11111b;
+            transform: translateY(-1px);
         }}
 
-        .stSelectbox, .stTextInput input {{
-            border-radius: 4px !important;
+        /* Inputs and Text Areas */
+        .stSelectbox div, .stTextInput input, .stFileUploader {{
+            background-color: #313244 !important;
+            color: #cdd6f4 !important;
+            border-radius: 6px !important;
         }}
 
         /* Header Styling */
-        h1, h2, h3 {{
-            color: #2d3436;
+        h1, h2, h3, h4 {{
+            color: #f5e0dc;
             font-family: 'Inter', sans-serif;
+            font-weight: 700;
+        }}
+
+        /* Dataframe styling for dark mode */
+        .stDataFrame {{
+            border: 1px solid #313244;
+            border-radius: 8px;
         }}
         </style>
 
@@ -90,8 +110,6 @@ def apply_custom_style():
 apply_custom_style()
 
 st.title(f"🚀 {APP_TITLE}")
-if DEVELOPER_NAME:
-    st.caption(f"Developed by {DEVELOPER_NAME}")
 
 # --- Session State Initialization ---
 for key in ["df", "model_trained", "deploy_clicked", "target_col"]:
@@ -143,8 +161,6 @@ if page == "Upload Dataset":
                     df_cleaned = clean_data(df)
                     st.session_state.df = df_cleaned
                     st.success("✅ Transformation applied!")
-                    with st.expander("🔍 Preview Cleaned Data"):
-                        st.dataframe(df_cleaned.head())
                 except Exception as e:
                     st.error(f"Transformation error: {e}")
                     
@@ -152,21 +168,29 @@ if page == "Upload Dataset":
 def run_eda(df):
     st.header("🔎 Exploratory Insights")
 
-    col1, col2 = st.columns(2)
+    # Metrics Row
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Rows", df.shape[0])
+    m2.metric("Columns", df.shape[1])
+    m3.metric("Missing Cells", df.isna().sum().sum())
+
+    st.divider()
+
+    col1, col2 = st.columns([2, 1])
     with col1:
-        st.subheader("📊 Statistics")
+        st.subheader("📊 Statistics Summary")
         st.write(df.describe(include="all"))
     with col2:
-        st.subheader("🧮 Data Schema")
-        feature_types = df.dtypes.reset_index()
-        feature_types.columns = ["Feature", "Type"]
-        st.dataframe(feature_types, use_container_width=True)
+        st.subheader("🧮 Data Types")
+        st.dataframe(df.dtypes.astype(str), use_container_width=True)
 
     st.divider()
 
     st.subheader("📉 Missing Values Analysis")
-    fig, ax = plt.subplots(figsize=(10, 2))
-    sns.heatmap(df.isnull(), cbar=False, cmap="Blues", ax=ax)
+    # Using a dark-friendly colormap
+    fig, ax = plt.subplots(figsize=(10, 2), facecolor='#1e1e2e')
+    sns.heatmap(df.isnull(), cbar=False, cmap="mako", ax=ax)
+    ax.set_facecolor('#1e1e2e')
     st.pyplot(fig)
 
     st.divider()
@@ -174,14 +198,8 @@ def run_eda(df):
     st.subheader("📌 Feature Distribution")
     numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
     if numeric_cols:
-        selected_col = st.selectbox("Select Feature to Visualize", numeric_cols)
-        fig = px.histogram(df, x=selected_col, marginal="box", nbins=30, color_discrete_sequence=['#0984e3'])
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader("📉 Correlation Matrix")
-    if len(numeric_cols) >= 2:
-        corr = df[numeric_cols].corr()
-        fig = px.imshow(corr, text_auto=True, color_continuous_scale='Blues')
+        selected_col = st.selectbox("Select Feature", numeric_cols)
+        fig = px.histogram(df, x=selected_col, marginal="box", nbins=30, color_discrete_sequence=['#89b4fa'])
         st.plotly_chart(fig, use_container_width=True)
 
 # --- Main Control Logic ---
@@ -203,12 +221,11 @@ if st.session_state.df is not None:
             st.session_state.target_col = target
             st.info(f"Detected Task Type: {task_type.upper()}")
             
+            # Target Distribution
             plot_target_distribution(df, target)
             st.image("outputs/target_dist.png")
 
             st.markdown("### ⚙️ Training Engine")
-            import time
-            start_time = time.time()
             progress = st.progress(0)
             model, X = run_automl(df, target)
             progress.progress(100)
@@ -216,40 +233,15 @@ if st.session_state.df is not None:
             with open("trained_model.pkl", "wb") as f:
                 pickle.dump(model, f)
 
-            feature_types = X.dtypes.apply(lambda dt: dt.name).to_dict()
-            with open("feature_types.pkl", "wb") as f:
-                pickle.dump(feature_types, f)
-
             st.session_state.model_trained = True
-            end_time = time.time()
-            st.success(f"Model Training Optimized in {end_time - start_time:.2f}s")
-            
-            try:
-                generate_shap(model, X)
-                st.image("outputs/shap_plot.png", caption="Feature Importance Analysis")
-            except:
-                st.warning("Feature importance visualization bypassed.")
+            st.success("Model Training Optimized!")
 
-    elif page == "Training Status":
-        if os.path.exists("trained_model.pkl"):
-            st.success("✅ Model Artifacts Ready")
-            if st.button("📈 View Model Insights"):
-                if os.path.exists("outputs/shap_plot.png"):
-                    st.image("outputs/shap_plot.png")
-
-    elif page == "Retrain Model":
-        if os.path.exists("trained_model.pkl"):
-            if st.button("🔁 Reset & Retrain Pipeline"):
-                st.info("Pipeline resetting...")
-        else:
-            st.warning("No active model found in workspace.")
-
-# --- Deployment Logic (Unified) ---
+# --- Deployment Logic ---
 if st.session_state.model_trained or os.path.exists("trained_model.pkl"):
-    if page in ["Run ML Agent", "Training Status", "Retrain Model"]:
+    if page in ["Run ML Agent", "Training Status"]:
         st.divider()
         st.subheader("🌐 Service Deployment")
-        if st.button("🔌 Launch Predictor API & UI"):
+        if st.button("🔌 Launch Predictor API"):
             if not st.session_state.deploy_clicked:
                 st.session_state.deploy_clicked = True
                 try:
@@ -257,14 +249,12 @@ if st.session_state.model_trained or os.path.exists("trained_model.pkl"):
                     st.toast("Predictor service online!", icon="🚀")
                 except Exception as e:
                     st.error(f"Deployment failed: {e}")
-            else:
-                st.info("Predictor service is already active.")
 
-# --- Export Model ---
+# --- Sidebar Export ---
 if os.path.exists("trained_model.pkl"):
     with open("trained_model.pkl", "rb") as f:
         st.sidebar.download_button(
-            label="📦 Export Trained Model",
+            label="📦 Export Model",
             data=f,
             file_name="trained_model.pkl",
             mime="application/octet-stream",
