@@ -1,12 +1,10 @@
 streamlit
 pandas
+numpy
 matplotlib
-seaborn
-scikit-learn
-flaml[automl]
 shap
-langchain
+flaml[automl]
+scikit-learn
 google-generativeai
-python-dotenv
-langchain-google-genai
-plotly
+tabulate
+openpyxl
